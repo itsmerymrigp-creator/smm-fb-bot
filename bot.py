@@ -54,13 +54,20 @@ def get_inbox(session):
         seen = []
         for a in soup.find_all('a', href=True):
             href = a.get('href', '')
-            if '/messages/read/' in href and 'tid=' in href:
-                tid = href.split('tid=')[-1].split('&')[0]
+            if '/messages/read/' in href:
+    tid = ''
+    if 'tid=' in href:
+        tid = href.split('tid=')[-1].split('&')[0]
+    elif 'thread_fbid=' in href:
+        tid = href.split('thread_fbid=')[-1].split('&')[0]
+    elif 'id=' in href:
+        tid = href.split('id=')[-1].split('&')[0]
                 if tid and tid not in seen:
                     seen.append(tid)
                     url = 'https://mbasic.facebook.com' + href if href.startswith('/') else href
                     threads.append({'id': tid, 'url': url})
-        return threads
+        print('Found threads: ' + str([t['id'] for t in threads]), flush=True)
+return threads
     except Exception as e:
         print('Inbox error: ' + str(e), flush=True)
         return []
