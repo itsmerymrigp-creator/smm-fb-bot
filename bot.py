@@ -47,7 +47,11 @@ def get_session():
  
  
 def verify_login(session):
-    r = session.get('https://mbasic.facebook.com/')
+    r = session.get('https://mbasic.facebook.com/messages/?folder=inbox&pageNum=1&numThreads=25')
+soup = BeautifulSoup(r.text, 'html.parser')
+page_text = r.text[:2000]
+STATUS['debug'].append('Page preview: ' + page_text[:500])
+print('Page preview: ' + page_text[:500], flush=True)
     if 'login' in r.url.lower():
         return False
     return True
