@@ -239,16 +239,18 @@ import threading
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
 class Handler(BaseHTTPRequestHandler):
-    def do_GET(self):
+def do_GET(self):
         self.send_response(200)
         self.send_header('Content-type', 'text/html')
         self.end_headers()
-        html = f'''<html><body style="background:#111;color:#0f0;font-family:monospace;padding:20px">
-        <h2>SMM Bot Status</h2>
-        <p>Login: {bot_status["login"]}</p>
-        <p>Threads found: {bot_status["threads"]}</p>
-        <p>Last check: {bot_status["last_check"]}</p>
-        <h3>Recent messages:</h3>
-        <pre>{"<br>".join(bot_status["messages"][-10:])}</pre>
-        <p><a href="/" style="color:#0f0">Refresh</a></p>
-        </body></h
+        msgs = '<br>'.join(bot_status['messages'][-10:])
+        html = '<html><body style="background:#111;color:#0f0;font-family:monospace;padding:20px">'
+        html += '<h2>SMM Bot Status</h2>'
+        html += '<p>Login: ' + bot_status["login"] + '</p>'
+        html += '<p>Threads: ' + str(bot_status["threads"]) + '</p>'
+        html += '<p>Last check: ' + bot_status["last_check"] + '</p>'
+        html += '<h3>Recent messages:</h3>'
+        html += '<pre>' + msgs + '</pre>'
+        html += '<p><a href="/" style="color:#0f0">Refresh</a></p>'
+        html += '</body></html>'
+        self.wfile.write(html.encode())
