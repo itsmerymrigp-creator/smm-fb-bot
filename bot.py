@@ -47,11 +47,7 @@ def get_session():
  
  
 def verify_login(session):
-    r = session.get('https://mbasic.facebook.com/messages/?folder=inbox&pageNum=1&numThreads=25')
-soup = BeautifulSoup(r.text, 'html.parser')
-page_text = r.text[:2000]
-STATUS['debug'].append('Page preview: ' + page_text[:500])
-print('Page preview: ' + page_text[:500], flush=True)
+    r = session.get('https://mbasic.facebook.com/')
     if 'login' in r.url.lower():
         return False
     return True
@@ -59,29 +55,30 @@ print('Page preview: ' + page_text[:500], flush=True)
  
 def get_inbox(session):
     try:
-        r = session.get('https://mbasic.facebook.com/messages/')
+        r = session.get('https://mbasic.facebook.com/messages/?folder=inbox&pageNum=1&numThreads=25')
         soup = BeautifulSoup(r.text, 'html.parser')
+        preview = r.text[:1000].replace('\n', ' ').replace('\r', '')
+        STATUS['debug'] = ['Page preview: ' + preview[:400]]
+        print('Page preview: ' + preview[:400], flush=True)
         threads = []
         seen = []
         all_hrefs = []
         for a in soup.find_all('a', href=True):
             href = a.get('href', '')
-            if '/messages/read/' in href or '/messages/thread/' in href:
-                all_hrefs.append(href)
+            all_hrefs.append(href[:80])
+            if 'messages' in href and ('tid=' in href or 'thread' in href or 'id=' in href):
                 tid = ''
                 if 'tid=' in href:
                     tid = href.split('tid=')[-1].split('&')[0]
                 elif 'thread_fbid=' in href:
                     tid = href.split('thread_fbid=')[-1].split('&')[0]
-                elif 'id=' in href:
-                    tid = href.split('id=')[-1].split('&')[0]
                 if tid and tid not in seen:
                     seen.append(tid)
                     url = 'https://mbasic.facebook.com' + href if href.startswith('/') else href
                     threads.append({'id': tid, 'url': url})
-        debug_msg = 'All msg hrefs: ' + str(all_hrefs[:5])
-        STATUS['debug'].append(debug_msg)
-        print(debug_msg, flush=True)
+        STATUS['debug'].append('All hrefs count: ' + str(len(all_hrefs)))
+        STATUS['debug'].append('Msg hrefs: ' + str([h for h in all_hrefs if 'message' in h][:5]))
+        print('All hrefs: ' + str(all_hrefs[:10]), flush=True)
         print('Found ' + str(len(threads)) + ' threads', flush=True)
         return threads
     except Exception as e:
@@ -98,11 +95,6 @@ def get_messages(session, url):
             text = div.get_text(strip=True)
             if text:
                 msgs.append(text)
-        if not msgs:
-            for div in soup.find_all('div', {'class': lambda x: x and 'message' in str(x).lower()}):
-                text = div.get_text(strip=True)
-                if text and len(text) > 1:
-                    msgs.append(text)
         return msgs
     except Exception as e:
         print('Messages error: ' + str(e), flush=True)
@@ -120,7 +112,6 @@ def send_message(session, thread_id, text):
                 form = f
                 break
         if not form:
-            print('No form found', flush=True)
             return False
         data = {}
         for inp in form.find_all(['input', 'textarea']):
@@ -193,14 +184,14 @@ def handle_command(sender_id, text, thread_id, session):
             e = parts[2] if len(parts) > 2 else ''
             p = parts[3] if len(parts) > 3 else ''
             if not u or not e or not p:
-                return reply('Usage: adduser [username] [email] [password]')
+                return reply('Usage: adduser [username] [email] [pass]')
             cur.execute('SELECT client_id FROM clients WHERE username=%s OR email=%s', (u, e))
             if cur.fetchone():
                 return reply('Already exists.')
             import hashlib
             cur.execute('INSERT INTO clients (username,email,password,balance,register_date) VALUES (%s,%s,%s,0,NOW())', (u, e, hashlib.md5(p.encode()).hexdigest()))
             db.commit()
-            reply('User Created!\nUsername: ' + u + '\nEmail: ' + e + '\nBalance: P0.00')
+            reply('User Created! Username: ' + u + ' Email: ' + e)
         elif cmd == 'status':
             oid = int(parts[1]) if len(parts) > 1 and parts[1].isdigit() else None
             if not oid:
@@ -227,7 +218,7 @@ def handle_command(sender_id, text, thread_id, session):
             else:
                 cur.execute('UPDATE orders SET order_status=%s WHERE order_id=%s', (status, oid))
             db.commit()
-            reply('Order #' + str(oid) + ' Updated\n' + old + ' -> ' + status + '\nTime: ' + now_time())
+            reply('Order #' + str(oid) + ' Updated ' + old + ' -> ' + status)
         elif cmd == 'resend':
             if not owner:
                 return reply('Not authorized.')
@@ -236,7 +227,7 @@ def handle_command(sender_id, text, thread_id, session):
                 return reply('Usage: resend [order_id]')
             cur.execute('UPDATE orders SET order_status="pending" WHERE order_id=%s', (oid,))
             db.commit()
-            reply('Order #' + str(oid) + ' resent! -> pending')
+            reply('Order #' + str(oid) + ' resent -> pending')
         elif cmd == 'orders':
             u = parts[1] if len(parts) > 1 else ''
             if not u:
@@ -274,7 +265,7 @@ class BotHandler(BaseHTTPRequestHandler):
         for m in STATUS['msgs'][-10:]:
             html += m + '\n'
         html += '</pre><h3>Debug:</h3><pre>'
-        for d in STATUS['debug'][-5:]:
+        for d in STATUS['debug'][-10:]:
             html += d + '\n'
         html += '</pre><p><a href="/" style="color:#0f0">Refresh</a></p>'
         html += '</body></html>'
