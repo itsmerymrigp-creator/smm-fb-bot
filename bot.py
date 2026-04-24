@@ -16,20 +16,25 @@ DB_NAME = os.environ.get('DB_NAME', 'boostlys_smm')
 DB_USER_DB = os.environ.get('DB_USER', 'boostlys_smm')
 DB_PASS = os.environ.get('DB_PASS', 'boostlys_smm')
  
-STATUS = {'login': 'Starting...', 'threads': 0, 'last': 'Never', 'msgs': []}
+STATUS = {'login': 'Starting...', 'threads': 0, 'last': 'Never', 'msgs': [], 'debug': []}
+ 
  
 def get_db():
     import mysql.connector
     return mysql.connector.connect(host=DB_HOST, database=DB_NAME, user=DB_USER_DB, password=DB_PASS)
  
+ 
 def php_format(n):
-    return '=P{:.2f}'.format(float(n))
+    return 'P{:.2f}'.format(float(n))
+ 
  
 def now_time():
     return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
  
+ 
 def is_owner(uid):
     return str(uid) in OWNER_IDS
+ 
  
 def get_session():
     session = requests.Session()
@@ -40,11 +45,13 @@ def get_session():
         session.cookies.set(name, value, domain='.facebook.com')
     return session
  
+ 
 def verify_login(session):
     r = session.get('https://mbasic.facebook.com/')
     if 'login' in r.url.lower():
         return False
     return True
+ 
  
 def get_inbox(session):
     try:
@@ -52,25 +59,31 @@ def get_inbox(session):
         soup = BeautifulSoup(r.text, 'html.parser')
         threads = []
         seen = []
+        all_hrefs = []
         for a in soup.find_all('a', href=True):
             href = a.get('href', '')
-            if '/messages/read/' in href:
-    tid = ''
-    if 'tid=' in href:
-        tid = href.split('tid=')[-1].split('&')[0]
-    elif 'thread_fbid=' in href:
-        tid = href.split('thread_fbid=')[-1].split('&')[0]
-    elif 'id=' in href:
-        tid = href.split('id=')[-1].split('&')[0]
+            if '/messages/read/' in href or '/messages/thread/' in href:
+                all_hrefs.append(href)
+                tid = ''
+                if 'tid=' in href:
+                    tid = href.split('tid=')[-1].split('&')[0]
+                elif 'thread_fbid=' in href:
+                    tid = href.split('thread_fbid=')[-1].split('&')[0]
+                elif 'id=' in href:
+                    tid = href.split('id=')[-1].split('&')[0]
                 if tid and tid not in seen:
                     seen.append(tid)
                     url = 'https://mbasic.facebook.com' + href if href.startswith('/') else href
                     threads.append({'id': tid, 'url': url})
-        print('Found threads: ' + str([t['id'] for t in threads]), flush=True)
-return threads
+        debug_msg = 'All msg hrefs: ' + str(all_hrefs[:5])
+        STATUS['debug'].append(debug_msg)
+        print(debug_msg, flush=True)
+        print('Found ' + str(len(threads)) + ' threads', flush=True)
+        return threads
     except Exception as e:
         print('Inbox error: ' + str(e), flush=True)
         return []
+ 
  
 def get_messages(session, url):
     try:
@@ -81,10 +94,16 @@ def get_messages(session, url):
             text = div.get_text(strip=True)
             if text:
                 msgs.append(text)
+        if not msgs:
+            for div in soup.find_all('div', {'class': lambda x: x and 'message' in str(x).lower()}):
+                text = div.get_text(strip=True)
+                if text and len(text) > 1:
+                    msgs.append(text)
         return msgs
     except Exception as e:
         print('Messages error: ' + str(e), flush=True)
         return []
+ 
  
 def send_message(session, thread_id, text):
     try:
@@ -113,6 +132,7 @@ def send_message(session, thread_id, text):
     except Exception as e:
         print('Send error: ' + str(e), flush=True)
         return False
+ 
  
 def handle_command(sender_id, text, thread_id, session):
     parts = text.strip().split(' ')
@@ -249,6 +269,9 @@ class BotHandler(BaseHTTPRequestHandler):
         html += '<h3>Recent messages:</h3><pre>'
         for m in STATUS['msgs'][-10:]:
             html += m + '\n'
+        html += '</pre><h3>Debug:</h3><pre>'
+        for d in STATUS['debug'][-5:]:
+            html += d + '\n'
         html += '</pre><p><a href="/" style="color:#0f0">Refresh</a></p>'
         html += '</body></html>'
         self.wfile.write(html.encode())
@@ -265,12 +288,11 @@ def start_server():
  
  
 def run_bot():
-    global STATUS
     print('Starting SMM FB Cookie Bot...', flush=True)
     session = get_session()
     if not verify_login(session):
         STATUS['login'] = 'FAILED - Cookies expired!'
-        print('Cookies expired! Update environment variables.', flush=True)
+        print('Cookies expired!', flush=True)
         while True:
             time.sleep(60)
     STATUS['login'] = 'OK - Logged in!'
@@ -281,7 +303,6 @@ def run_bot():
             threads = get_inbox(session)
             STATUS['threads'] = len(threads)
             STATUS['last'] = now_time()
-            print('Checking ' + str(len(threads)) + ' threads...', flush=True)
             for thread in threads[:10]:
                 tid = thread['id']
                 msgs = get_messages(session, thread['url'])
