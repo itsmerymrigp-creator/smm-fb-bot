@@ -193,18 +193,29 @@ def handle_command(sender_id, text, thread_id, session):
         try: reply(f'❌ Error: {str(e)}')
         except: pass
 
+# Global status for web display
+bot_status = {'login': 'Starting...', 'threads': 0, 'last_check': 'Never', 'messages': []}
+
 def run_bot():
-    print('Starting SMM FB Cookie Bot...')
+    global bot_status
+    import sys
+    print('Starting SMM FB Cookie Bot...', flush=True)
+    sys.stdout.flush()
     session = get_session()
-    if not verify_login(session):
-        print('Cookies expired! Update C_USER, XS, DATR, FR in environment variables.')
+    r = session.get('https://mbasic.facebook.com/')
+    if 'login' in r.url.lower():
+        bot_status['login'] = 'FAILED - Cookies expired!'
+        print('Cookies expired!', flush=True)
         return
-    print('Bot running! Polling every 5s...')
+    bot_status['login'] = 'OK - Logged in!'
+    print('Login OK!', flush=True)
     seen = set()
     while True:
         try:
             threads = get_inbox(session)
-            print(f'Checking {len(threads)} threads...')
+            bot_status['threads'] = len(threads)
+            bot_status['last_check'] = now_time()
+            print(f'Checking {len(threads)} threads...', flush=True)
             for thread in threads[:10]:
                 tid = thread['id']
                 msgs = get_messages(session, thread['url'])
@@ -213,14 +224,15 @@ def run_bot():
                     if key not in seen and len(msg) > 1:
                         seen.add(key)
                         if len(seen) > 1000: seen = set(list(seen)[-500:])
-                        print(f'Message: {msg[:50]}')
+                        print(f'Message: {msg[:50]}', flush=True)
+                        bot_status['messages'].append(msg[:50])
                         handle_command(C_USER, msg, tid, session)
                         time.sleep(2)
             time.sleep(5)
         except KeyboardInterrupt:
             break
         except Exception as e:
-            print(f'Loop error: {e}')
+            print(f'Loop error: {e}', flush=True)
             time.sleep(10)
 
 import threading
@@ -229,19 +241,14 @@ from http.server import HTTPServer, BaseHTTPRequestHandler
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
+        self.send_header('Content-type', 'text/html')
         self.end_headers()
-        self.wfile.write(b'SMM Bot Running!')
-    def log_message(self, format, *args):
-        pass
-
-def start_server():
-    port = int(os.environ.get('PORT', 10000))
-    server = HTTPServer(('0.0.0.0', port), Handler)
-    server.serve_forever()
-
-if __name__ == '__main__':
-    t = threading.Thread(target=start_server)
-    t.daemon = True
-    t.start()
-    print(f'Web server started!')
-    run_bot()
+        html = f'''<html><body style="background:#111;color:#0f0;font-family:monospace;padding:20px">
+        <h2>SMM Bot Status</h2>
+        <p>Login: {bot_status["login"]}</p>
+        <p>Threads found: {bot_status["threads"]}</p>
+        <p>Last check: {bot_status["last_check"]}</p>
+        <h3>Recent messages:</h3>
+        <pre>{"<br>".join(bot_status["messages"][-10:])}</pre>
+        <p><a href="/" style="color:#0f0">Refresh</a></p>
+        </body></h
