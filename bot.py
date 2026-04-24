@@ -39,7 +39,12 @@ def is_owner(uid):
 def get_session():
     session = requests.Session()
     session.headers.update({
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.5',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Connection': 'keep-alive',
+        'Upgrade-Insecure-Requests': '1',
     })
     for name, value in {'c_user': C_USER, 'xs': XS, 'datr': DATR, 'fr': FR}.items():
         session.cookies.set(name, value, domain='.facebook.com')
@@ -47,7 +52,7 @@ def get_session():
  
  
 def verify_login(session):
-    r = session.get('https://mbasic.facebook.com/')
+    r = session.get('https://m.facebook.com/')
     if 'login' in r.url.lower():
         return False
     return True
@@ -55,18 +60,19 @@ def verify_login(session):
  
 def get_inbox(session):
     try:
-        r = session.get('https://mbasic.facebook.com/messages/?folder=inbox&pageNum=1&numThreads=25')
+        r = session.get('https://m.facebook.com/messages/')
         soup = BeautifulSoup(r.text, 'html.parser')
-        preview = r.text[:1000].replace('\n', ' ').replace('\r', '')
-        STATUS['debug'] = ['Page preview: ' + preview[:400]]
-        print('Page preview: ' + preview[:400], flush=True)
+        preview = r.text[:500].replace('\n', ' ').replace('\r', '')
+        STATUS['debug'] = ['URL: ' + r.url, 'Preview: ' + preview[:300]]
+        print('URL: ' + r.url, flush=True)
+        print('Preview: ' + preview[:300], flush=True)
         threads = []
         seen = []
         all_hrefs = []
         for a in soup.find_all('a', href=True):
             href = a.get('href', '')
             all_hrefs.append(href[:80])
-            if 'messages' in href and ('tid=' in href or 'thread' in href or 'id=' in href):
+            if 'messages' in href and ('tid=' in href or 'thread' in href):
                 tid = ''
                 if 'tid=' in href:
                     tid = href.split('tid=')[-1].split('&')[0]
@@ -74,11 +80,12 @@ def get_inbox(session):
                     tid = href.split('thread_fbid=')[-1].split('&')[0]
                 if tid and tid not in seen:
                     seen.append(tid)
-                    url = 'https://mbasic.facebook.com' + href if href.startswith('/') else href
+                    url = 'https://m.facebook.com' + href if href.startswith('/') else href
                     threads.append({'id': tid, 'url': url})
-        STATUS['debug'].append('All hrefs count: ' + str(len(all_hrefs)))
-        STATUS['debug'].append('Msg hrefs: ' + str([h for h in all_hrefs if 'message' in h][:5]))
-        print('All hrefs: ' + str(all_hrefs[:10]), flush=True)
+        msg_hrefs = [h for h in all_hrefs if 'message' in h.lower()]
+        STATUS['debug'].append('Msg hrefs: ' + str(msg_hrefs[:5]))
+        STATUS['debug'].append('Total hrefs: ' + str(len(all_hrefs)))
+        print('Msg hrefs: ' + str(msg_hrefs[:5]), flush=True)
         print('Found ' + str(len(threads)) + ' threads', flush=True)
         return threads
     except Exception as e:
@@ -103,7 +110,7 @@ def get_messages(session, url):
  
 def send_message(session, thread_id, text):
     try:
-        url = 'https://mbasic.facebook.com/messages/read/?tid=' + thread_id
+        url = 'https://m.facebook.com/messages/read/?tid=' + thread_id
         r = session.get(url)
         soup = BeautifulSoup(r.text, 'html.parser')
         form = None
@@ -112,6 +119,7 @@ def send_message(session, thread_id, text):
                 form = f
                 break
         if not form:
+            print('No form found', flush=True)
             return False
         data = {}
         for inp in form.find_all(['input', 'textarea']):
@@ -121,7 +129,7 @@ def send_message(session, thread_id, text):
         data['body'] = text
         action = form.get('action', '')
         if action.startswith('/'):
-            action = 'https://mbasic.facebook.com' + action
+            action = 'https://m.facebook.com' + action
         session.post(action, data=data)
         return True
     except Exception as e:
