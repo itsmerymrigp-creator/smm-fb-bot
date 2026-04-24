@@ -60,7 +60,7 @@ def verify_login(session):
  
 def get_inbox(session):
     try:
-        r = session.get('https://m.facebook.com/messages/')
+        r = session.get('https://m.facebook.com/messages/', headers={'Accept-Encoding': 'identity'})
         soup = BeautifulSoup(r.text, 'html.parser')
         preview = r.text[:500].replace('\n', ' ').replace('\r', '')
         STATUS['debug'] = ['URL: ' + r.url, 'Preview: ' + preview[:300]]
